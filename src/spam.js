@@ -3,7 +3,7 @@ import { RegexpTokenizer, JaroWinklerDistance, WordTokenizer } from 'natural';
 import { intersection, merge } from 'lodash';
 import isURL from 'validator/lib/isURL';
 
-export class Spam extends ChatPlugin {
+export default class Spam extends ChatPlugin {
   name = 'spam';
 
   propTypes = {
@@ -12,13 +12,13 @@ export class Spam extends ChatPlugin {
     messageHistory: T.number,
     messageSimilarity: T.number,
     urlFilterEnabled: T.bool,
-    wordFilterCSV: T.string,
+    wordFilter: T.any([T.string, T.array]),
     initialPenalty: T.number,
     penaltyMultiplier: T.number,
     banThreshold: T.number,
     goodBehaviorTime: T.number,
     wordFilterEnabled: T.bool,
-    roleSettingsJSON: T.string,
+    roleSettings: T.any([T.string, T.object]),
   };
 
   defaultProps = {
@@ -43,15 +43,17 @@ export class Spam extends ChatPlugin {
     super.register(bot);
     const tokenizer = new RegexpTokenizer({pattern: /\,/});
     try {
-      if (this.options.wordFilter) {
-        this.options.wordFilter = tokenizer.tokenize(this.options.wordFilterCSV.toLowerCase());
+      if (typeof this.options.wordFilter === 'string') {
+        this.options.wordFilter = tokenizer.tokenize(this.options.wordFilter.toLowerCase());
       }
     } catch (err) {
       this.bot.log.warning(err);
     }
 
     try {
-      this.options.roleSettings = JSON.parse(this.options.roleSettingsJSON);
+      if (typeof this.options.roleSettings === 'string') {
+        this.options.roleSettings = JSON.parse(this.options.roleSettings);
+      }
     } catch (err) {
       this.options.roleSettings = {};
       this.bot.log.warning(err);
