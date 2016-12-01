@@ -1,4 +1,10 @@
-import { ChatPlugin, respond, help, permissionGroup, PropTypes as T } from '@exoplay/exobot';
+import {
+  ChatPlugin,
+  respond,
+  help,
+  permissionGroup,
+  PropTypes as T,
+  AdapterOperationTypes as AT} from '@exoplay/exobot';
 import { RegexpTokenizer, JaroWinklerDistance, WordTokenizer } from 'natural';
 import { intersection, merge } from 'lodash';
 import isURL from 'validator/lib/isURL';
@@ -8,29 +14,29 @@ export default class Spam extends ChatPlugin {
 
   propTypes = {
     messageCount: T.number,
-    messageTimeout: T.number,
+    messageTimeout: T.number.isRequired,
     messageHistory: T.number,
     messageSimilarity: T.number,
     urlFilterEnabled: T.bool,
-    wordFilter: T.any([T.string, T.array]),
+    wordFilter: T.oneOfType([T.string, T.array]),
     initialPenalty: T.number,
     penaltyMultiplier: T.number,
     banThreshold: T.number,
     goodBehaviorTime: T.number,
     wordFilterEnabled: T.bool,
-    roleSettings: T.any([T.string, T.object]),
+    roleSettings: T.oneOfType([T.string, T.object]),
   };
 
   defaultProps = {
-    messageCount: 2,
-    messageTimeout: 1,
+    messageCount: 3,
+    messageTimeout: 10,
     messageHistory: 2,
     messageSimilarity: 90,
     urlFilterEnabled: true,
     initialPenalty: 10,
     penaltyMultiplier: 3,
     banThreshold: 6,
-    goodBehaviorTime: 3600,
+    goodBehaviorTime: 10,
     wordFilterEnabled: true,
   }
 
@@ -60,16 +66,57 @@ export default class Spam extends ChatPlugin {
     }
 
     this.bot.emitter.on('receive-message', m => {
+      let err;
+      const userMsg = [];
       if (!m.whisper) {
         if (!this.spamUsers[m.user.id]) {
           this.spamUsers[m.user.id] = this.newUser(m);
         }
-        if (!this.checkContentFilters(m)) {
-          if (!this.checkRate(m)) {
-            if (!this.checkSimilarity(m)) {
-              this.checkGoodBehavior(m);
+        let messageHistory = this.options.messageHistory;
+        let messageSimilarity = this.options.messageSimilarity;
+        let messageTimeout = this.options.messageTimeout;
+        let messageCount = this.options.messageCount;
+        let URLFilter = this.options.urlFilterEnabled;
+        let wordFilter = this.options.wordFilterEnabled;
+
+        if (this.options.roleSettings) {
+          const userRoles = this.bot.getUserRoles(m.user.id);
+          userRoles.forEach(r => {
+            const role = this.options.roleSettings[r];
+            if (role) {
+              if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
+                URLFilter = false;
+              }
+              if (this.options.roleSettings[r] && !this.options.roleSettings[r].wordFilterEnabled) {
+                wordFilter = false;
+              }
+              if (typeof role.messageCount !== 'undefined') {
+                messageHistory = role.messageHistory;
+              }
+              if (typeof role.messageTimeout !== 'undefined') {
+                messageSimilarity = role.messageSimilarity;
+              }
+              if (typeof role.messageCount !== 'undefined') {
+                messageCount = role.messageCount;
+              }
+              if (typeof role.messageTimeout !== 'undefined') {
+                messageTimeout = role.messageTimeout;
+              }
             }
-          }
+          });
+        }
+
+        err = this.checkContentFilters(m, URLFilter, wordFilter);
+        if (err) {userMsg.push(err);}
+        err = this.checkRate(m, messageTimeout, messageCount);
+        if (err) {userMsg.push(err);}
+        err = this.checkSimilarity(m, messageHistory, messageSimilarity);
+        if (err) {userMsg.push(err);}
+        this.bot.log.debug(userMsg);
+        if (userMsg.length) {
+          this.punishUser(m, userMsg.join(', '));
+        } else {
+          this.checkGoodBehavior(m);
         }
       }
     });
@@ -88,124 +135,92 @@ export default class Spam extends ChatPlugin {
   }
 
   punishUser(message, reason) {
+    this.bot.log.debug(reason);
     const user = this.spamUsers[message.user.id];
     user.punishTime = Date.now();
-    if (user.punishMsgId !== message.id) {
-      user.punishMsgId = message.id;
-      if (++user.punishCount > this.options.banThreshold) {
-        this.bot.emitter.emit('adapter-operation', {
-          type: 'disciplineUser',
-          subtype: 'permanent',
-          userId: message.user.id,
-          messageText: reason,
-        });
-      } else {
-        const userMult = this.options.penaltyMultiplier * (user.punishCount - 1);
-        const duration = this.options.initialPenalty * (userMult || 1);
-        this.bot.emitter.emit('adapter-operation', {
-          type: 'disciplineUser',
-          subtype: 'temporary',
-          userId: message.user.id,
-          messageText: reason,
-          duration,
-        });
-      }
+    user.punishMsgId = message.id;
+    if (++user.punishCount > this.options.banThreshold) {
+      this.bot.emitter.emit(AT.DISCIPLINE_USER_PERMANENT, false, {
+        userId: message.user.id,
+        messageText: reason,
+      });
+    } else {
+      const userMult = this.options.penaltyMultiplier * (user.punishCount - 1);
+      const duration = this.options.initialPenalty * (userMult || 1);
+      this.bot.emitter.emit(AT.DISCIPLINE_USER_TEMPORARY, false, {
+        userId: message.user.id,
+        messageText: reason,
+        duration,
+      });
     }
   }
 
-  checkSimilarity = (message) => {
+  checkSimilarity = (message, messageHistory, messageSimilarity) => {
     const user = this.spamUsers[message.user.id];
-    const userRoles = this.bot.getUserRoles(message.user.id);
-    let messageHistory = this.options.messageHistory;
-    let messageSimilarity = this.options.messageSimilarity;
-    userRoles.forEach(r => {
-      const role = this.options.roleSettings[r];
-      if (role) {
-        if (typeof role.messageCount !== 'undefined') {
-          messageHistory = role.messageHistory;
-        }
-        if (typeof role.messageTimeout !== 'undefined') {
-          messageSimilarity = role.messageSimilarity;
-        }
-      }
-    });
+
     if (messageHistory) {
-      const leastDifferent = Object.keys(user.history)
+      Object.keys(user.history)
         .forEach(h => {
           if (h >= messageHistory) {
             delete user.history[h];
           }
-        })
+        });
+      const leastDifferent = Object.keys(user.history)
         .reduce((p, c) => Math.max(JaroWinklerDistance(message.text, user.history[c])*100, p), 0);
       if (user.historyNum++ >= messageHistory) {
         user.historyNum = 0;
       }
+
       user.history[user.historyNum] = message.text;
       if (leastDifferent > messageSimilarity) {
-        this.punishUser(message, 'messages too similar');
-        return true;
+        return 'Message too similar to history';
       }
     }
+
+    return false;
   }
 
-  checkRate = (message) => {
+  checkRate = (message, messageTimeout, messageCount) => {
     const user = this.spamUsers[message.user.id];
-    const userRoles = this.bot.getUserRoles(message.user.id);
-    let messageTimeout = this.options.messageTimeout;
-    let messageCount = this.options.messageCount;
-    userRoles.forEach(r => {
-      const role = this.options.roleSettings[r];
-      if (role) {
-        if (typeof role.messageCount !== 'undefined') {
-          messageCount = role.messageCount;
-        }
-        if (typeof role.messageTimeout !== 'undefined') {
-          messageTimeout = role.messageTimeout;
-        }
-      }
-    });
-    if (user) {
+
+    if (messageCount > 0 && messageTimeout > 0) {
       if (Date.now() < user.messageTime + messageTimeout * 1000) {
-        if (user.messageCount++ > messageCount) {
-          this.punishUser(message, 'exceeded message rate');
-          return true;
+        if (++user.messageCount > messageCount) {
+          return 'Exceeded message rate';
         }
       } else {
         user.messageTime = Date.now();
         user.messageCount = 1;
       }
-    } else {
-      this.spamUsers[message.user.id] = this.newUser();
     }
+
+    return false;
   }
 
-  checkContentFilters = (message) => {
+  checkContentFilters = (message, URLFilter, wordFilter) => {
     const wordTokenizer = new WordTokenizer();
     const urlTokenizer = new RegexpTokenizer({pattern: /\s/});
     const wordArray = wordTokenizer.tokenize(message.text.toLowerCase());
     const urlArray = urlTokenizer.tokenize(message.text.toLowerCase());
-    const userRoles = this.bot.getUserRoles(message.user.id);
-    let userURLFilter = true;
-    if (this.options.wordFilter && this.options.wordFilterEnabled) {
+    const filterMsgs = [];
+
+    if (this.options.wordFilter && wordFilter) {
       if (intersection(this.options.wordFilter, wordArray).length) {
-        this.punishUser(message, 'used filtered word');
-        return true;
+        filterMsgs.push('Used filtered word');
       }
     }
 
-    userRoles.forEach(r => {
-      if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
-        userURLFilter = false;
-      }
-    });
-
-    if (this.options.urlFilterEnabled && userURLFilter) {
+    if (URLFilter) {
       if (urlArray.reduce((p, c) => p || isURL(c), false)) {
-        this.punishUser(message, 'URL detected');
-        return true;
+        filterMsgs.push('URL detected and not allowed');
       }
-
     }
+
+    if (filterMsgs.length) {
+      return filterMsgs.join(', ');
+    }
+
+    return false;
   }
 
   checkGoodBehavior = (message) => {
