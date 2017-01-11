@@ -43,10 +43,6 @@ export default class Spam extends ChatPlugin {
   constructor () {
     super(...arguments);
     this.spamUsers = {};
-  }
-
-  register (bot) {
-    super.register(bot);
     const tokenizer = new RegexpTokenizer({pattern: /\,/});
     try {
       if (typeof this.options.wordFilter === 'string') {
@@ -65,61 +61,63 @@ export default class Spam extends ChatPlugin {
       this.bot.log.warning(err);
     }
 
-    this.bot.emitter.on('receive-message', m => {
-      let err;
-      const userMsg = [];
-      if (!m.whisper) {
-        if (!this.spamUsers[m.user.id]) {
-          this.spamUsers[m.user.id] = this.newUser(m);
-        }
-        let messageHistory = this.options.messageHistory;
-        let messageSimilarity = this.options.messageSimilarity;
-        let messageTimeout = this.options.messageTimeout;
-        let messageCount = this.options.messageCount;
-        let URLFilter = this.options.urlFilterEnabled;
-        let wordFilter = this.options.wordFilterEnabled;
+    this.bot.emitter.on('receive-message', this.checkMessage(message));
+  }
 
-        if (this.options.roleSettings) {
-          const userRoles = this.bot.getUserRoles(m.user.id);
-          userRoles.forEach(r => {
-            const role = this.options.roleSettings[r];
-            if (role) {
-              if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
-                URLFilter = false;
-              }
-              if (this.options.roleSettings[r] && !this.options.roleSettings[r].wordFilterEnabled) {
-                wordFilter = false;
-              }
-              if (typeof role.messageCount !== 'undefined') {
-                messageHistory = role.messageHistory;
-              }
-              if (typeof role.messageTimeout !== 'undefined') {
-                messageSimilarity = role.messageSimilarity;
-              }
-              if (typeof role.messageCount !== 'undefined') {
-                messageCount = role.messageCount;
-              }
-              if (typeof role.messageTimeout !== 'undefined') {
-                messageTimeout = role.messageTimeout;
-              }
-            }
-          });
-        }
-
-        err = this.checkContentFilters(m, URLFilter, wordFilter);
-        if (err) {userMsg.push(err);}
-        err = this.checkRate(m, messageTimeout, messageCount);
-        if (err) {userMsg.push(err);}
-        err = this.checkSimilarity(m, messageHistory, messageSimilarity);
-        if (err) {userMsg.push(err);}
-        this.bot.log.debug(userMsg);
-        if (userMsg.length) {
-          this.punishUser(m, userMsg.join(', '));
-        } else {
-          this.checkGoodBehavior(m);
-        }
+  checkMessage = m => {
+    let err;
+    const userMsg = [];
+    if (!m.whisper) {
+      if (!this.spamUsers[m.user.id]) {
+        this.spamUsers[m.user.id] = this.newUser(m);
       }
-    });
+      let messageHistory = this.options.messageHistory;
+      let messageSimilarity = this.options.messageSimilarity;
+      let messageTimeout = this.options.messageTimeout;
+      let messageCount = this.options.messageCount;
+      let URLFilter = this.options.urlFilterEnabled;
+      let wordFilter = this.options.wordFilterEnabled;
+
+      if (this.options.roleSettings) {
+        const userRoles = this.bot.getUserRoles(m.user.id);
+        userRoles.forEach(r => {
+          const role = this.options.roleSettings[r];
+          if (role) {
+            if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
+              URLFilter = false;
+            }
+            if (this.options.roleSettings[r] && !this.options.roleSettings[r].wordFilterEnabled) {
+              wordFilter = false;
+            }
+            if (typeof role.messageCount !== 'undefined') {
+              messageHistory = role.messageHistory;
+            }
+            if (typeof role.messageTimeout !== 'undefined') {
+              messageSimilarity = role.messageSimilarity;
+            }
+            if (typeof role.messageCount !== 'undefined') {
+              messageCount = role.messageCount;
+            }
+            if (typeof role.messageTimeout !== 'undefined') {
+              messageTimeout = role.messageTimeout;
+            }
+          }
+        });
+      }
+
+      err = this.checkContentFilters(m, URLFilter, wordFilter);
+      if (err) {userMsg.push(err);}
+      err = this.checkRate(m, messageTimeout, messageCount);
+      if (err) {userMsg.push(err);}
+      err = this.checkSimilarity(m, messageHistory, messageSimilarity);
+      if (err) {userMsg.push(err);}
+      this.bot.log.debug(userMsg);
+      if (userMsg.length) {
+        this.punishUser(m, userMsg.join(', '));
+      } else {
+        this.checkGoodBehavior(m);
+      }
+    }
   }
 
   newUser() {

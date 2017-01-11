@@ -18,14 +18,14 @@
     "validator": "^6.0.0"
   },
   "devDependencies": {
-    "@exoplay/exobot": "~3.2.0",
-    "@r/build": "git://github.com/ajacksified/node-build#679c3f3d47c0916237d55128ece4cc817b489ef8",
+    "@exoplay/exobot": "~4.0.0",
+    "@exoplay/exobot-build": "^0.1.0",
     "babel-plugin-syntax-decorators": "^6.8.0",
     "babel-plugin-transform-decorators": "^6.8.0",
     "babel-plugin-transform-decorators-legacy": "^1.3.4"
   },
   "peerDependencies": {
-    "@exoplay/exobot": "~3.2.0"
+    "@exoplay/exobot": "~4.0.0"
   },
   "keywords": [
     "chatbot",
