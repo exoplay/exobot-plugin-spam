@@ -1,31 +1,37 @@
 {
   "name": "@exoplay/exobot-plugin-spam",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Spam plugin for exobot",
   "main": "spam.js",
   "scripts": {
-    "build": "exobot-build",
-    "watch": "exobot-build --watch",
-    "blueprints": "blueprints"
+    "build": "exobot build -i src/spam.js -o spam.js",
+    "watch": "exobot build --watch -i src/spam.js -o spam.js",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/criticalsave/exobot-plugin-spam.git"
   },
   "dependencies": {
+    "@exoplay/exobot": ">=4.1 <5",
     "lodash": "^4.15.0",
     "natural": "~0.4.0",
     "validator": "^6.0.0"
   },
   "devDependencies": {
-    "@exoplay/exobot": "~4.0.0",
-    "@exoplay/exobot-build": "^0.1.0",
-    "babel-plugin-syntax-decorators": "^6.8.0",
-    "babel-plugin-transform-decorators": "^6.8.0",
-    "babel-plugin-transform-decorators-legacy": "^1.3.4"
-  },
-  "peerDependencies": {
-    "@exoplay/exobot": "~4.0.0"
+    "@exoplay/exobot": ">=4.1 <5",
+    "@exoplay/exobot-build": "^0.2.1",
+    "babel-eslint": "^7.1.1",
+    "eslint": "^3.12.2",
+    "eslint-config-airbnb": "^13.0.0",
+    "eslint-import-resolver-node": "^0.3.0",
+    "eslint-plugin-babel": "^4.0.0",
+    "eslint-plugin-import": "^2.2.0",
+    "eslint-plugin-jsx-a11y": "^2.2.3",
+    "eslint-plugin-react": "^6.6.0",
+    "regenerator-runtime": "^0.9.6",
+    "source-map-support": "^0.4.6"
   },
   "keywords": [
     "chatbot",
