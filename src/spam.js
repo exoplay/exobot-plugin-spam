@@ -66,8 +66,8 @@ export default class Spam extends Plugin {
   }
 
   @help('Checks all messages against spam plugin')
-  @permissionGroup('public');
-  @listen(/^.*$/i);
+  @permissionGroup('public')
+  @listen(/^.*$/i)
   checkMessage(match, m) {
     let err;
     const userMsg = [];
@@ -235,9 +235,9 @@ export default class Spam extends Plugin {
     }
   }
 
-  @help('/spam set <role> configurationItem value');
-  @permissionGroup('config');
-  @respond(/^spam set (\S+) (\S+) (\d+)/i);
+  @help('/spam set <role> configurationItem value')
+  @permissionGroup('config')
+  @respond(/^spam set (\S+) (\S+) (\d+)/i)
   setConfig([, role, configurationItem, value]) {
     switch (configurationItem.toLowerCase()) {
       case 'messageCount':
@@ -273,9 +273,9 @@ export default class Spam extends Plugin {
     }
   }
 
-  @help('/spam enable/disable word filter');
-  @permissionGroup('config');
-  @respond(/^spam (enable|disable) word filter\s*(?:for (\S+))?/i);
+  @help('/spam enable/disable word filter')
+  @permissionGroup('config')
+  @respond(/^spam (enable|disable) word filter\s*(?:for (\S+))?/i)
   toggleWordFilter([, op, role]) {
     switch (op) {
       case 'enable':
@@ -303,9 +303,9 @@ export default class Spam extends Plugin {
     }
   }
 
-  @help('/spam enable/disable URL filter');
-  @permissionGroup('config');
-  @respond(/^spam (enable|disable) url filter\s*(?:for (\S+))?/i);
+  @help('/spam enable/disable URL filter')
+  @permissionGroup('config')
+  @respond(/^spam (enable|disable) url filter\s*(?:for (\S+))?/i)
   toggleUrlFilter([, op, role]) {
     switch (op) {
       case 'enable':
@@ -333,9 +333,9 @@ export default class Spam extends Plugin {
     }
   }
 
-  @help('/spam add/remove word <word>');
-  @permissionGroup('config');
-  @respond(/^spam (add|remove) word (.+)/);
+  @help('/spam add/remove word <word>')
+  @permissionGroup('config')
+  @respond(/^spam (add|remove) word (.+)/)
   modifyWordList([, op, word]) {
     switch (op) {
       case 'add': {
