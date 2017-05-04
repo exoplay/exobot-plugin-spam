@@ -1,18 +1,19 @@
 import {
-  ChatPlugin,
+  Plugin,
   respond,
+  listen,
   help,
   permissionGroup,
   PropTypes as T,
-  AdapterOperationTypes as AT} from '@exoplay/exobot';
+  AdapterOperationTypes as AT } from '@exoplay/exobot';
 import { RegexpTokenizer, JaroWinklerDistance, WordTokenizer } from 'natural';
 import { intersection, merge } from 'lodash';
 import isURL from 'validator/lib/isURL';
 
-export default class Spam extends ChatPlugin {
-  name = 'spam';
+export default class Spam extends Plugin {
+  static type = 'spam';
 
-  propTypes = {
+  static propTypes = {
     messageCount: T.number,
     messageTimeout: T.number.isRequired,
     messageHistory: T.number,
@@ -27,7 +28,7 @@ export default class Spam extends ChatPlugin {
     roleSettings: T.oneOfType([T.string, T.object]),
   };
 
-  defaultProps = {
+  static defaultProps = {
     messageCount: 3,
     messageTimeout: 10,
     messageHistory: 2,
@@ -38,16 +39,13 @@ export default class Spam extends ChatPlugin {
     banThreshold: 6,
     goodBehaviorTime: 10,
     wordFilterEnabled: true,
-  }
+  };
 
-  constructor () {
+  constructor() {
     super(...arguments);
     this.spamUsers = {};
-  }
-
-  register (bot) {
-    super.register(bot);
     const tokenizer = new RegexpTokenizer({pattern: /\,/});
+
     try {
       if (typeof this.options.wordFilter === 'string') {
         this.options.wordFilter = tokenizer.tokenize(this.options.wordFilter.toLowerCase());
@@ -65,61 +63,65 @@ export default class Spam extends ChatPlugin {
       this.bot.log.warning(err);
     }
 
-    this.bot.emitter.on('receive-message', m => {
-      let err;
-      const userMsg = [];
-      if (!m.whisper) {
-        if (!this.spamUsers[m.user.id]) {
-          this.spamUsers[m.user.id] = this.newUser(m);
-        }
-        let messageHistory = this.options.messageHistory;
-        let messageSimilarity = this.options.messageSimilarity;
-        let messageTimeout = this.options.messageTimeout;
-        let messageCount = this.options.messageCount;
-        let URLFilter = this.options.urlFilterEnabled;
-        let wordFilter = this.options.wordFilterEnabled;
+  }
 
-        if (this.options.roleSettings) {
-          const userRoles = this.bot.getUserRoles(m.user.id);
-          userRoles.forEach(r => {
-            const role = this.options.roleSettings[r];
-            if (role) {
-              if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
-                URLFilter = false;
-              }
-              if (this.options.roleSettings[r] && !this.options.roleSettings[r].wordFilterEnabled) {
-                wordFilter = false;
-              }
-              if (typeof role.messageCount !== 'undefined') {
-                messageHistory = role.messageHistory;
-              }
-              if (typeof role.messageTimeout !== 'undefined') {
-                messageSimilarity = role.messageSimilarity;
-              }
-              if (typeof role.messageCount !== 'undefined') {
-                messageCount = role.messageCount;
-              }
-              if (typeof role.messageTimeout !== 'undefined') {
-                messageTimeout = role.messageTimeout;
-              }
-            }
-          });
-        }
-
-        err = this.checkContentFilters(m, URLFilter, wordFilter);
-        if (err) {userMsg.push(err);}
-        err = this.checkRate(m, messageTimeout, messageCount);
-        if (err) {userMsg.push(err);}
-        err = this.checkSimilarity(m, messageHistory, messageSimilarity);
-        if (err) {userMsg.push(err);}
-        this.bot.log.debug(userMsg);
-        if (userMsg.length) {
-          this.punishUser(m, userMsg.join(', '));
-        } else {
-          this.checkGoodBehavior(m);
-        }
+  @help('Checks all messages against spam plugin')
+  @permissionGroup('public');
+  @listen(/^.*$/i);
+  checkMessage(match, m) {
+    let err;
+    const userMsg = [];
+    if (!m.whisper) {
+      if (!this.spamUsers[m.user.id]) {
+        this.spamUsers[m.user.id] = this.newUser(m);
       }
-    });
+      let messageHistory = this.options.messageHistory;
+      let messageSimilarity = this.options.messageSimilarity;
+      let messageTimeout = this.options.messageTimeout;
+      let messageCount = this.options.messageCount;
+      let URLFilter = this.options.urlFilterEnabled;
+      let wordFilter = this.options.wordFilterEnabled;
+
+      if (this.options.roleSettings) {
+        const userRoles = this.bot.getUserRoles(m.user.id);
+        userRoles.forEach(r => {
+          const role = this.options.roleSettings[r];
+          if (role) {
+            if (this.options.roleSettings[r] && !this.options.roleSettings[r].urlFilterEnabled) {
+              URLFilter = false;
+            }
+            if (this.options.roleSettings[r] && !this.options.roleSettings[r].wordFilterEnabled) {
+              wordFilter = false;
+            }
+            if (typeof role.messageCount !== 'undefined') {
+              messageHistory = role.messageHistory;
+            }
+            if (typeof role.messageTimeout !== 'undefined') {
+              messageSimilarity = role.messageSimilarity;
+            }
+            if (typeof role.messageCount !== 'undefined') {
+              messageCount = role.messageCount;
+            }
+            if (typeof role.messageTimeout !== 'undefined') {
+              messageTimeout = role.messageTimeout;
+            }
+          }
+        });
+      }
+
+      err = this.checkContentFilters(m, URLFilter, wordFilter);
+      if (err) {userMsg.push(err);}
+      err = this.checkRate(m, messageTimeout, messageCount);
+      if (err) {userMsg.push(err);}
+      err = this.checkSimilarity(m, messageHistory, messageSimilarity);
+      if (err) {userMsg.push(err);}
+      this.bot.log.debug(userMsg);
+      if (userMsg.length) {
+        this.punishUser(m, userMsg.join(', '));
+      } else {
+        this.checkGoodBehavior(m);
+      }
+    }
   }
 
   newUser() {
@@ -233,63 +235,46 @@ export default class Spam extends ChatPlugin {
     }
   }
 
+  @help('/spam set <role> configurationItem value');
   @permissionGroup('config');
-  @help('/spam set <configurationItem> [for <role>] option');
-  @respond(/^spam set (rate|similarty|message|first|timeout|ban|good).*?(?:for (\S+))?\s*(?:(\d+)\/?(\d+)?)/i);
-  setConfig([, command, role, option1, option2]) {
-    switch (command.toLowerCase()) {
-      case 'rate':
-        if (role) {
-          merge(this.options.roleSettings, {
-            [role]: {
-              messageCount: option1,
-              messageTimeout: option2,
-            },
-          });
-        } else {
-          this.options.messageCount = option1;
-          this.options.messageTimeout = option2;
-        }
+  @respond(/^spam set (\S+) (\S+) (\d+)/i);
+  setConfig([, role, configurationItem, value]) {
+    switch (configurationItem.toLowerCase()) {
+      case 'messageCount':
+        merge(this.options.roleSettings, {
+          [role]: {
+            messageCount: value,
+          },
+        });
         return 'Message rate configured.';
-      case 'similarity':
-        if (role) {
-          merge(this.options.roleSettings, {
-            [role]: {
-              messageSimilarity: option1,
-            },
-          });
-        } else {
-          this.options.messageSimilarity = option1;
-        }
+      case 'messageTimeout':
+        merge(this.options.roleSettings, {
+          [role]: {
+            messageTimeout: value,
+          },
+        });
+        return 'Message rate configured.';
+      case 'messageSimilarity':
+        merge(this.options.roleSettings, {
+          [role]: {
+            messageSimilarity: value,
+          },
+        });
         return 'Message silimarity score configured.';
-      case 'message' :
-        if (role) {
-          merge(this.options.roleSettings, {
-            [role]: {
-              messageHistory: option1,
-            },
-          });
-        } else {
-          this.options.messageHistory = option1;
-        }
+      case 'messageHistory' :
+        merge(this.options.roleSettings, {
+          [role]: {
+            messageHistory: value,
+          },
+        });
         return 'Message history length configured.';
-      case 'first' :
-        this.options.initialPenalty = option1;
-        return 'Initial penalty configured.';
-      case 'timeout' :
-        this.options.penaltyMultiplier = option1;
-        return 'Penalty multiplier configured.';
-      case 'ban' :
-        this.option.banThreshold = option1;
-        return 'Ban threshold configured.';
-      case 'good' :
-        this.options.goodBehaviorTime = option1;
-        return 'Good behavior time configured.';
+      default:
+        return 'Unknown configurationItem';
     }
   }
 
-  @permissionGroup('config');
   @help('/spam enable/disable word filter');
+  @permissionGroup('config');
   @respond(/^spam (enable|disable) word filter\s*(?:for (\S+))?/i);
   toggleWordFilter([, op, role]) {
     switch (op) {
@@ -318,8 +303,8 @@ export default class Spam extends ChatPlugin {
     }
   }
 
-  @permissionGroup('config');
   @help('/spam enable/disable URL filter');
+  @permissionGroup('config');
   @respond(/^spam (enable|disable) url filter\s*(?:for (\S+))?/i);
   toggleUrlFilter([, op, role]) {
     switch (op) {
@@ -348,8 +333,8 @@ export default class Spam extends ChatPlugin {
     }
   }
 
-  @permissionGroup('config');
   @help('/spam add/remove word <word>');
+  @permissionGroup('config');
   @respond(/^spam (add|remove) word (.+)/);
   modifyWordList([, op, word]) {
     switch (op) {
