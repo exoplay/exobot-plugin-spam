@@ -1,6 +1,6 @@
 {
   "name": "@exoplay/exobot-plugin-spam",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Spam plugin for exobot",
   "main": "spam.js",
   "scripts": {
